@@ -1,16 +1,5 @@
-build_list = {'tanks': {
-        'тумба': {'ip': 1300},
-        'Ава шест': {'ip': 1250},
-        'Важка булава': {'ip': 1275},
-        'Таймстоп': {'ip': 1240}
-        },
-    'heals':{
+def test(**kwargs):
+    return kwargs
 
-        },
-    'support':{
 
-        },
-    'dd':{
-
-        },
-              }
+print(test(name='hello world'))

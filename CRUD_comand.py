@@ -2,15 +2,15 @@ from model import *
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-
-def create_object(object, dbname='test.sqlite', **kwargs):
+dbname = 'test.sqlite'
+def create_object(object, dbname=dbname, **kwargs):
     engine = create_engine(f'sqlite:///{dbname}')
     with Session(bind=engine) as ses:
         ses.add(object(**kwargs))
         return ses.commit()
 
 
-def read_object(object, object_id=0, dbname='test.sqlite'):
+def read_object(object, object_id=0, dbname=dbname):
     engine = create_engine(f'sqlite:///{dbname}')
     with Session(bind=engine) as ses:
         if object_id == 0:
@@ -19,14 +19,19 @@ def read_object(object, object_id=0, dbname='test.sqlite'):
             return ses.query(object).where(object.id == object_id).one()
 
 
-def update_object(object, object_id: int, dbname='test.sqlite', **kwargs):
+def update_object(object, object_id: int, dbname=dbname, **kwargs):
     engine = create_engine(f'sqlite:///{dbname}')
     with Session(bind=engine) as ses:
+        if 'build_lists' in kwargs:
+            object.build_lists = kwargs['build_lists']
+            del kwargs['build_lists']
+            if len(kwargs) == 0:
+                return ses.commit()
         ses.query(object).where(object.id == object_id).update(kwargs)
         return ses.commit()
 
 
-def delete_object(object, object_id: int, dbname='test.sqlite'):
+def delete_object(object, object_id: int, dbname=dbname):
     engine = create_engine(f'sqlite:///{dbname}')
     with Session(bind=engine) as ses:
         ses.query(object).where(object.id == object_id).delete()
@@ -34,4 +39,5 @@ def delete_object(object, object_id: int, dbname='test.sqlite'):
 
 
 if __name__ == '__main__':
-    pass
+    print(read_object(BuildList, object_id=1))
+    update_object(ProfileList, 1, build_lists=[read_object(BuildList, object_id=1)])

@@ -59,7 +59,7 @@ async def on_ready():
     print('Запуск')
     await bot.tree.sync()
 
-@app_commands.choices(choices=[ #зробити бд для вибора ролі
+@app_commands.choices(role=[
     app_commands.Choice(name='Tank', value='tank'),
     app_commands.Choice(name='Heal', value='heal'),
     app_commands.Choice(name='saport', value='saport'),
@@ -69,7 +69,7 @@ async def on_ready():
 ])
 @bot.tree.command(name='create_build') #створення білда
 async def create_build(ctx: discord.Interaction, build_name: str, build_description: str, role: app_commands.Choice[str]):
-    create_object(BuildList, name=build_name, description=build_description, role=role)
+    create_object(BuildList, name=build_name, description=build_description, role=role.value)
     await ctx.response.send_message(f'Білд {build_name} успішно створено!', ephemeral=True)
 
 
@@ -80,19 +80,18 @@ async def delete_build(ctx: discord.Interaction, build_id: int):
 
 
 @bot.tree.command(name='create_profile') #Створення активності
-async def create_activities(ctx: discord.Interaction, activities_name: str, activities_description: str,
+async def create_profile(ctx: discord.Interaction, activities_name: str, activities_description: str,
                             tank_count: int,
                             heal_count: int,
                             support_count: int,
                             mdd_count: int,
-                            rdd_count: int,
-                            batlMount_count: int):
-    if tank_count + heal_count + support_count + mdd_count+ rdd_count + batlMount_count > 20:
-        await ctx.response.send_message('Не правильно вказана кількість ролів , впевніться що їх сума не більша за 20')
+                            rdd_count: int, battlemount_count: int,):
+    if tank_count + heal_count + support_count + mdd_count+ rdd_count + battlemount_count > 20:
+        await ctx.response.send_message('Не правильно вказана кількість ролів , впевніться що їх сума не більша за 20', ephemeral=True)
     else:
         create_object(ProfileList, name=activities_name, description=activities_description, tank_count=tank_count,
                       heal_count=heal_count, support_count=support_count, mdd_count=mdd_count,
-                      rdd_count=rdd_count, batlMount_count=batlMount_count)
+                      rdd_count=rdd_count, battle_mount_count=battlemount_count)
         await ctx.response.send_message(f'Активність {activities_name} успішно створена', ephemeral=True)
 
 
@@ -104,7 +103,7 @@ async def delete_activivtiess(ctx: discord.Interaction, activitie_id: int):
 
 
 @bot.tree.command(name='add_build_to_profile') #створення звязку між активностями та білдами ( Для цього використано класи )
-async def create_profile(ctx):
+async def add_build_to_profile(ctx):
     view = SurveyView()
     await ctx.response.send_message(view=view)
 

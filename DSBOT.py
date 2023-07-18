@@ -3,9 +3,9 @@ import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
-
 from CRUD_comand import *
 from model import *
+from party_managment import Party_managment
 
 intents = discord.Intents.all()
 intents.message_content = True
@@ -13,6 +13,92 @@ intents.message_content = True
 bot = commands.Bot(command_prefix=commands.when_mentioned_or('!'), intents=intents)
 
 #Класи створені для того щоб зробити випадаюче меню
+
+class TakePart(discord.ui.View):
+    build = None
+    item_power = None
+
+    def __init__(self, activities:model.ProfileList, *args, **kwargs):
+        super(TakePart, self).__init__(*args, **kwargs)
+        self.add_item(ChouseBild(activities))
+
+    @discord.ui.button(label="Підтвердити", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.message.edit(content="Ви взяли участь в активності", view=None)
+        self.stop()
+
+    @discord.ui.select(
+        placeholder="Вибери ip",
+        options=[discord.SelectOption(label=str(i), value=str(i)) for i in range(900, 2001, 50)]
+    )
+    async def select_ip(self, interaction: discord.Interaction, ip: discord.ui.Select):
+        self.item_power = ip.values
+        await interaction.response.defer()
+
+
+    async def chouse_bild(self, interaction:discord.Interaction, choise: discord.ui.Select):
+        self.build = choise
+        await interaction.response.defer()
+
+
+
+class ChouseBild(discord.ui.Select):
+    def __init__(self, activities:model.ProfileList):
+        options = [discord.SelectOption(label=build.name, value=build.id) for build in get_builds(activities)]
+        super().__init__(options=options, placeholder="Selecct a build", max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.view.chouse_bild(interaction, self.values)
+
+
+class StartInteraction(discord.ui.View):
+    party: Party_managment
+    activities: ProfileList
+    to_show = True
+
+
+
+    def __init__(self, party, activities, *args, **kwargs):
+        self.party = party
+        self.activities = activities
+        super(StartInteraction, self).__init__(*args, **kwargs)
+
+
+    async def show_party(self, interaction: discord.Interaction):
+        await self.party.finished_party
+        while self.to_show:
+            interaction.message.edit()
+
+    @discord.ui.button(label="Взяти участь", style=discord.ButtonStyle.success)
+    async def take_part(self, interaction: discord.Interaction,
+                        button:discord.ui.Button):
+        user = bot.get_user(interaction.user.id)
+        param = TakePart(self.activities)
+        if user.name in self.party.all_player_list:
+            await user.send(content="Ви вже зареєстрованні")
+            return None
+
+        await user.send(view=param)
+        await param.wait()
+        build = read_object(BuildList, int(param.build[0]))
+        await self.party.add_to_party(ip=param.item_power, user_name=user.name, role=build.role, build_name=build.name)
+        print("Додано до паті")
+
+
+    @discord.ui.button(label="Зупинити", style=discord.ButtonStyle.red)
+    async def stop_interaction(self, interaction: discord.Interaction,
+                        button:discord.ui.Button):
+        self.to_show = False
+        self.stop()
+
+
+    @discord.ui.button(label="Взяти участь", style=discord.ButtonStyle.success)
+    async def remove_player(self, interaction: discord.Interaction,
+                        button:discord.ui.Button):
+            user = bot.get_user(interaction.user.id)
+            await self.party.remove_party_member(user.name)
+            await user.send(content="Ви відмінили реєстрацію")
+
 
 class BuildSelect(discord.ui.Select):
     def __init__(self):
@@ -34,7 +120,6 @@ class SurveyView(discord.ui.View):
     )
     async def select_age(self, interaction: discord.Interaction, select_item: discord.ui.Select):
         self.answer1 = select_item.values
-        print(self.answer1)
         self.children[0].disabled = True
         build_select = BuildSelect()
         self.add_item(build_select)
@@ -42,7 +127,6 @@ class SurveyView(discord.ui.View):
         await interaction.response.defer()
 
     async def respond_to_answer2(self, interaction: discord.Interaction, choices):
-        print(choices)
         self.answer2 = choices
         self.children[1].disabled = True
         await interaction.message.edit(view=self)
@@ -52,6 +136,9 @@ class SurveyView(discord.ui.View):
         await asyncio.sleep(5)
         await interaction.message.delete()
         self.stop()
+
+
+#Кінець класів
 
 
 @bot.event
@@ -108,6 +195,22 @@ async def add_build_to_profile(ctx):
     await ctx.response.send_message(view=view)
 
     await view.wait()
+
+
+@bot.tree.command(name='start')
+async def start_activities(ctx: discord.Interaction, activities_id: int, time: int, chanel: discord.TextChannel):
+    await chanel.send(content="Hello world!")
+    if time < 300:
+        await ctx.response.send_message("Час на активацію повинен бути більше за 300 секунд", ephemeral=True)
+        return None
+    activities = read_object(ProfileList, activities_id)
+    party = Party_managment(activities.tank_count, activities.heal_count, activities.support_count,
+                            activities.mdd_count, activities.rdd_count, activities.battle_mount_count)
+    view = StartInteraction(party, read_object(model.ProfileList, object_id=activities_id), timeout=time)
+    url = ctx.message.jump_url
+    await ctx.response.send_message(view=view)
+    await view.wait()
+
 
 
 bot.run('MTA4NzQ3NzkzODU2OTYxMzQ2NA.Gqapbe.xMFK6maRm9KRbEXLCL5SYfXf3XPviwDHLcuB3U')

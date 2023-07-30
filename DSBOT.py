@@ -1,6 +1,7 @@
 import asyncio
 
 import discord
+import sqlalchemy
 from discord import app_commands
 from discord.ext import commands
 from CRUD_comand import *
@@ -13,7 +14,6 @@ intents.message_content = True
 bot = commands.Bot(command_prefix=commands.when_mentioned_or('!'), intents=intents)
 
 #Класи створені для того щоб зробити випадаюче меню
-
 class TakePart(discord.ui.View):
     build = None
     item_power = None
@@ -44,7 +44,7 @@ class TakePart(discord.ui.View):
 
 class ChouseBild(discord.ui.Select):
     def __init__(self, activities:model.ProfileList):
-        options = [discord.SelectOption(label=build.name, value=build.id) for build in get_builds(activities)]
+        options = [discord.SelectOption(label=build.name, value=build.id, description=build.role) for build in get_builds(activities)]
         super().__init__(options=options, placeholder="Selecct a build", max_values=1)
 
     async def callback(self, interaction: discord.Interaction):
@@ -54,7 +54,6 @@ class ChouseBild(discord.ui.Select):
 class StartInteraction(discord.ui.View):
     party: Party_managment
     activities: ProfileList
-    to_show = True
 
 
 
@@ -64,10 +63,6 @@ class StartInteraction(discord.ui.View):
         super(StartInteraction, self).__init__(*args, **kwargs)
 
 
-    async def show_party(self, interaction: discord.Interaction):
-        await self.party.finished_party
-        while self.to_show:
-            interaction.message.edit()
 
     @discord.ui.button(label="Взяти участь", style=discord.ButtonStyle.success)
     async def take_part(self, interaction: discord.Interaction,
@@ -81,7 +76,7 @@ class StartInteraction(discord.ui.View):
         await user.send(view=param)
         await param.wait()
         build = read_object(BuildList, int(param.build[0]))
-        await self.party.add_to_party(ip=param.item_power, user_name=user.name, role=build.role, build_name=build.name)
+        await self.party.add_to_party(ip=param.item_power[0], user_name=user.name, role=build.role, build_name=build.name)
         print("Додано до паті")
 
 
@@ -92,7 +87,7 @@ class StartInteraction(discord.ui.View):
         self.stop()
 
 
-    @discord.ui.button(label="Взяти участь", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Вилучити мене з активності", style=discord.ButtonStyle.red)
     async def remove_player(self, interaction: discord.Interaction,
                         button:discord.ui.Button):
             user = bot.get_user(interaction.user.id)
@@ -102,24 +97,33 @@ class StartInteraction(discord.ui.View):
 
 class BuildSelect(discord.ui.Select):
     def __init__(self):
-        options = [discord.SelectOption(label=build.name, value=build.id) for build in read_object(BuildList)]
+        options = [discord.SelectOption(label=build.name, value=build.id, description=build.role) for build in read_object(BuildList)]
         super().__init__(options=options, placeholder="Selecct a build", max_values=len(read_object(BuildList)))
 
     async def callback(self, interaction: discord.Interaction):
         await self.view.respond_to_answer2(interaction, self.values)
 
 
+class ProfileSelect(discord.ui.Select): #додати провірку на існування активності та білдів
+
+    def __init__(self):
+        options = [discord.SelectOption(label=profile.name, value=profile.id, description=profile.description) for profile in read_object(ProfileList)]
+        super().__init__(options=options, placeholder="Selecct a profile")
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.view.select_age(interaction, self.values)
+
+
 class SurveyView(discord.ui.View):
     answer1 = None
     answer2 = None
 
-    @discord.ui.select(
-        placeholder="Select activities",
-        options=[discord.SelectOption(label=activities.name,
-                                      value=activities.id) for activities in read_object(ProfileList)]
-    )
-    async def select_age(self, interaction: discord.Interaction, select_item: discord.ui.Select):
-        self.answer1 = select_item.values
+    def __init__(self, *args, **kwargs):
+        super(SurveyView, self).__init__(*args, **kwargs)
+        self.add_item(ProfileSelect())
+
+    async def select_age(self, interaction: discord.Interaction, select_item):
+        self.answer1 = select_item
         self.children[0].disabled = True
         build_select = BuildSelect()
         self.add_item(build_select)
@@ -138,6 +142,51 @@ class SurveyView(discord.ui.View):
         self.stop()
 
 
+
+class SendPartyView(discord.ui.View):
+
+    party: Party_managment
+    chanel: discord.TextChannel
+
+    @discord.ui.button(label='Почати показ паті', style=discord.ButtonStyle.success)
+    async def start_party_show(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.party.checking = True
+        if len(self.party.all_player_list) == 0:
+            await bot.get_user(interaction.user.id).send("Кількість учасників повинна бути більшою за 0")
+        else:
+            await self.party.finish_party()
+            all_embeds = []
+            for party_num in range(len(self.party.finished_party)):
+                embed = discord.Embed(
+                    title=f"Паті {party_num}"
+                )
+                for player in self.party.finished_party[party_num]:
+                    embed.add_field(name="",
+                                    value=f"{list(player.keys())[0]} {list(player.values())[0]['role']} {list(player.values())[0]['build_name']} {list(player.values())[0]['ip']}", inline=False)
+                all_embeds.append(embed)
+            message = await self.chanel.send(embeds=all_embeds)
+            while self.party.checking:
+                await self.party.finish_party()
+                all_embeds = []
+                for party_num in range(len(self.party.finished_party)):
+                    embed = discord.Embed(
+                        title= f"Паті {party_num}"
+                    )
+                    for player in self.party.finished_party[party_num]:
+                        embed.add_field(name="", value=f"{list(player.keys())[0]}".ljust(10) + f" {list(player.values())[0]['role']}".ljust(10) + f" {list(player.values())[0]['build_name']}".ljust(10) + f" {list(player.values())[0]['ip']}", inline=False)
+                    all_embeds.append(embed)
+                await message.edit(embeds=all_embeds)
+                all_embeds = []
+                await asyncio.sleep(10)
+
+    @discord.ui.button(label='зупинити показ паті', style=discord.ButtonStyle.red)
+    async def stop_party_show(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.party.checking = False
+    async def on_timeout(self) -> None:
+        self.party.checking = False
+
+
+
 #Кінець класів
 
 
@@ -146,10 +195,12 @@ async def on_ready():
     print('Запуск')
     await bot.tree.sync()
 
+
+#Команди на створення обєктів
 @app_commands.choices(role=[
     app_commands.Choice(name='Tank', value='tank'),
     app_commands.Choice(name='Heal', value='heal'),
-    app_commands.Choice(name='saport', value='saport'),
+    app_commands.Choice(name='support', value='support'),
     app_commands.Choice(name='MDD', value='MDD'),
     app_commands.Choice(name='RDD', value='RDD'),
     app_commands.Choice(name='Battle Mount', value='Battle Mount')
@@ -162,9 +213,11 @@ async def create_build(ctx: discord.Interaction, build_name: str, build_descript
 
 @bot.tree.command(name='delete_build') # видалення білда за id(В майбутньому зробити за іменем )
 async def delete_build(ctx: discord.Interaction, build_id: int):
-    delete_object(BuildList, object_id=build_id)
-    await ctx.response.send_message(f'Білд {read_object(BuildList, build_id)} успішно вилучено!', ephemeral=True)
-
+    try:
+        delete_object(BuildList, object_id=build_id)
+        await ctx.response.send_message(f'Білд {read_object(BuildList, build_id)} успішно вилучено!', ephemeral=True)
+    except sqlalchemy.exc.NoResultFound:
+        await ctx.response.send_message(f"Білд з даним id не існує", ephemeral=True)
 
 @bot.tree.command(name='create_profile') #Створення активності
 async def create_profile(ctx: discord.Interaction, activities_name: str, activities_description: str,
@@ -183,11 +236,13 @@ async def create_profile(ctx: discord.Interaction, activities_name: str, activit
 
 
 @bot.tree.command(name='delete_activities') # вилучення активності
-async def delete_activivtiess(ctx: discord.Interaction, activitie_id: int):
-    delete_object(ProfileList, activitie_id)
-    await ctx.response.send_message(f"Активність {read_object(ProfileList, activitie_id)} успішно вилучена",
-                                    ephemeral=True)
-
+async def delete_activivtiess(ctx: discord.Interaction, activitie_id: int): # добавити перевірку на існування активності
+    try:
+        await ctx.response.send_message(f"Активність {read_object(ProfileList, activitie_id)} успішно вилучена",
+                                        ephemeral=True)
+        delete_object(ProfileList, activitie_id)
+    except sqlalchemy.exc.NoResultFound:
+        await ctx.response.send_message(f"Активність з даною id не існує")
 
 @bot.tree.command(name='add_build_to_profile') #створення звязку між активностями та білдами ( Для цього використано класи )
 async def add_build_to_profile(ctx):
@@ -196,10 +251,12 @@ async def add_build_to_profile(ctx):
 
     await view.wait()
 
+#кінець команд на створення обєктів
 
+
+#Команди для початку
 @bot.tree.command(name='start')
 async def start_activities(ctx: discord.Interaction, activities_id: int, time: int, chanel: discord.TextChannel):
-    await chanel.send(content="Hello world!")
     if time < 300:
         await ctx.response.send_message("Час на активацію повинен бути більше за 300 секунд", ephemeral=True)
         return None
@@ -207,10 +264,32 @@ async def start_activities(ctx: discord.Interaction, activities_id: int, time: i
     party = Party_managment(activities.tank_count, activities.heal_count, activities.support_count,
                             activities.mdd_count, activities.rdd_count, activities.battle_mount_count)
     view = StartInteraction(party, read_object(model.ProfileList, object_id=activities_id), timeout=time)
-    url = ctx.message.jump_url
+    party_show = SendPartyView(timeout=time)
+    party_show.party = party
+    party_show.chanel = chanel
     await ctx.response.send_message(view=view)
+    await bot.get_user(ctx.user.id).send(view=party_show)
     await view.wait()
+    await party_show.wait()
+
+#кінець команди для початку
+
+#Команди для перегляду активностів
+@bot.tree.command(name='show_all_builds')
+async def show_all_build(ctx: discord.Interaction):
+    embed = discord.Embed(title='Список всіх активностів')
+    for build in read_object(BuildList):
+        embed.add_field(name="", value=f"|id: {build.id}|  |name:  {build.name}|  |role:  {build.role}|  |desc:  {build.description}|" ,inline=False)
+    await ctx.response.send_message(embed=embed)
 
 
+@bot.tree.command(name='show_all_activities')
+async def show_all_profile(ctx: discord.Interaction):
+    embed = discord.Embed(title='Список всіх активностів')
+    for profile in read_object(ProfileList):
+        embed.add_field(name="", value=f"|id: {profile.id}|  |name:  {profile.name}|  |desc:  {profile.description}|", inline=False)
+    await ctx.response.send_message(embed=embed)
 
-bot.run('MTA4NzQ3NzkzODU2OTYxMzQ2NA.Gqapbe.xMFK6maRm9KRbEXLCL5SYfXf3XPviwDHLcuB3U')
+
+#кінець команд для перегляду активнсотів
+bot.run('BOT_KEY')

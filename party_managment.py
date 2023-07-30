@@ -7,13 +7,13 @@ class Party_managment:
 
     finished_party = []
     all_player_list = {}
-    all_sorted_role = {'tank': {}, 'heal': {}, 'support': {}, 'mdd': {}, 'rdd': {}, 'battle_mount' :{}}
-    splited_party_list = {'tank': [], 'heal': [], 'support': [], 'mdd': [], 'rdd': [], 'battle_mount' :[]}
+    all_sorted_role = {'tank': {}, 'heal': {}, 'support': {}, 'MDD': {}, 'RDD': {}, 'battle_mount' :{}}
+    splited_party_list = {'tank': [], 'heal': [], 'support': [], 'MDD': [], 'RDD': [], 'battle_mount' :[]}
 
     def __init__(self, tank_count=0, heal_count=0, support_count=0,
                  mdd_count=0, rdd_count=0, battle_mount_count=0):
         self.all_role_counts = {'tank': tank_count, 'heal': heal_count, 'support': support_count,
-                                'mdd': mdd_count, 'rdd': rdd_count, 'battle_mount': battle_mount_count}
+                                'MDD': mdd_count, 'rdd': rdd_count, 'battle_mount': battle_mount_count}
 
     async def add_to_party(self, role, build_name, user_name, ip):
         self.all_player_list[user_name] = {'role': role, 'build_name': build_name, 'ip': ip}
@@ -22,7 +22,7 @@ class Party_managment:
     async def remove_party_member(self, user_name):
         del self.all_player_list[user_name]
 
-    def filter_players_by_role(self, role): #асинхронна функція
+    async def filter_players_by_role(self, role): #асинхронна функція
         players_list = {}
         for key in self.all_player_list:
             if self.all_player_list[key]['role'] == role:
@@ -31,10 +31,12 @@ class Party_managment:
 
     async def role_sort(self):
         for role in self.all_sorted_role:
-            self.all_sorted_role[role].update(dict(sorted(self.filter_players_by_role(role).items(), key=lambda x: x[1]['ip'], reverse=True)))
+            player_list = await self.filter_players_by_role(role)
+            self.all_sorted_role[role].update(dict(sorted(player_list.items(), key=lambda x: x[1]['ip'], reverse=True)))
 
 
     async def create_party(self):
+        self.splited_party_list = {'tank': [], 'heal': [], 'support': [], 'MDD': [], 'RDD': [], 'battle_mount' :[]}
         form_party = []
         for keys in self.all_sorted_role:
             roles = self.all_sorted_role[keys]
@@ -50,7 +52,8 @@ class Party_managment:
 
 
     async def finish_party(self):
-        while self.checking:
+        self.finished_party = []
+        if len(self.all_player_list) > 0:
             await self.role_sort()
             await self.create_party()
             party_size = max([len(self.splited_party_list[i]) for i in self.splited_party_list])
@@ -61,8 +64,7 @@ class Party_managment:
                         party_manage += self.splited_party_list[role][i]
                 self.finished_party.append(party_manage)
                 party_manage = []
-                print(self.finished_party)
-            await asyncio.sleep(10)
+        print(f"finished party is {self.finished_party}")
 
 
 
@@ -74,10 +76,10 @@ if __name__ == '__main__':
     async def main():
         test = Party_managment(2, 3, 2, 5, 5)
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(test.finish_party())
             for i in range(40):
                 tg.create_task(test.add_to_party(choice(['tank', 'heal', 'support', 'mdd', 'rdd']), generate_username(1)[0], generate_username(1)[0], randint(1100, 2000)))
             tg.create_task(stop_check(test))
+            tg.create_task(test.finish_party())
 
     #test = Party_managment(2, 3, 2, 5, 5)
 

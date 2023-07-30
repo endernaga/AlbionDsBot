@@ -292,4 +292,4 @@ async def show_all_profile(ctx: discord.Interaction):
 
 
 #кінець команд для перегляду активнсотів
-bot.run('BOT_KEY')
+bot.run('MTA4NzQ3NzkzODU2OTYxMzQ2NA.GXeQ9j.sNjMXX0_cqHVw3Tudqq5Sz07euc3xpdoyZ758w')

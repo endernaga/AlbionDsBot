@@ -41,10 +41,13 @@ class Party_managment:
         for keys in self.all_sorted_role:
             roles = self.all_sorted_role[keys]
             for role in roles:
-                form_party.append({role: self.all_player_list[role]})
-                if len(form_party) == self.all_role_counts[keys]:
-                    self.splited_party_list[keys].append(form_party)
-                    form_party = []
+                try:
+                    form_party.append({role: self.all_player_list[role]})
+                    if len(form_party) == self.all_role_counts[keys]:
+                        self.splited_party_list[keys].append(form_party)
+                        form_party = []
+                except KeyError:
+                    pass
             else:
                 if len(form_party) > 0:
                     self.splited_party_list[keys].append(form_party)
